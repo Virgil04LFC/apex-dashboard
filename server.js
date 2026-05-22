@@ -115,8 +115,8 @@ app.get('/api/sms-count', async (req, res) => {
         locationId: LOCATION_ID,
         filters: [
           { field: 'tags',        operator: 'contains',         value: TAG_REVIEW },
-          { field: 'dateUpdated', operator: 'greater_than',     value: monthStart },
-          { field: 'dateUpdated', operator: 'less_than_equal',  value: monthEnd   },
+          { field: 'dateUpdated', operator: 'gt',  value: monthStart },
+          { field: 'dateUpdated', operator: 'lte', value: monthEnd   },
         ],
         pageLimit: 1, // We only need the total count
       }),
