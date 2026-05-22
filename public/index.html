@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Apex Motors — Review Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Review Dashboard</h1>
+    <span id="last-updated"></span>
+  </header>
+
+  <main>
+
+    <!-- Widget 3: SMS Activity -->
+    <section class="widget" id="widget-sms">
+      <h2>Review Requests This Month</h2>
+      <div class="sms-body">
+        <div class="sms-counter">
+          <span id="sms-sent">—</span>
+          <span class="sms-divider">/</span>
+          <span id="sms-cap">50</span>
+        </div>
+        <div class="sms-label" id="sms-month-label">Loading…</div>
+        <div class="progress-track">
+          <div class="progress-fill" id="sms-bar"></div>
+        </div>
+        <div class="sms-alert" id="sms-alert" hidden>
+          ⚠️ Approaching monthly cap
+        </div>
+      </div>
+    </section>
+
+    <!-- Widget 1: Private Feedback -->
+    <section class="widget" id="widget-feedback">
+      <h2>Private Feedback</h2>
+      <div id="feedback-state">
+        <p class="loading">Loading…</p>
+      </div>
+      <table id="feedback-table" hidden>
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Rating</th>
+            <th>Feedback</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody id="feedback-body"></tbody>
+      </table>
+    </section>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

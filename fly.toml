@@ -1,0 +1,21 @@
+# fly.toml — Apex Motors Review Dashboard
+# Region: Frankfurt (fra) — EU, close to GHL EU infrastructure
+# Deploy: flyctl deploy (from this directory)
+# Secrets: flyctl secrets set GHL_TOKEN=pit-xxx LOCATION_ID=WqqCMnmsoIF1BZY8iWt5
+
+app            = "apex-dashboard"
+primary_region = "fra"
+
+[build]
+
+[http_service]
+  internal_port        = 3000
+  force_https          = true
+  auto_stop_machines   = "stop"
+  auto_start_machines  = true
+  min_machines_running = 0
+  processes            = ["app"]
+
+[[vm]]
+  size   = "shared-cpu-1x"
+  memory = "256mb"
