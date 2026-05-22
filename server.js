@@ -103,27 +103,44 @@ app.get('/api/feedback', async (req, res) => {
  */
 app.get('/api/sms-count', async (req, res) => {
   try {
-    const now          = new Date();
-    const monthStart   = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const monthEnd     = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
-    const monthLabel   = now.toLocaleString('en-IE', { month: 'long', year: 'numeric' });
+    const now        = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
+    const monthLabel = now.toLocaleString('en-IE', { month: 'long', year: 'numeric' });
 
-    // Search contacts tagged review-request-sent, updated this month
-    const data = await ghl(`/contacts/search`, {
-      method: 'POST',
-      body: JSON.stringify({
-        locationId: LOCATION_ID,
-        filters: [
-          { field: 'tags',        operator: 'contains',         value: TAG_REVIEW },
-          { field: 'dateUpdated', operator: 'gt',  value: monthStart },
-          { field: 'dateUpdated', operator: 'lte', value: monthEnd   },
-        ],
-        pageLimit: 1, // We only need the total count
-      }),
-    });
+    // Pull all contacts tagged review-request-sent, then filter by dateUpdated
+    // server-side (GHL contacts/search doesn't support date range operators on
+    // dateUpdated). Cap is 50/month so total tagged set stays small.
+    let page = 1;
+    let sent = 0;
+    let hasMore = true;
 
-    const sent     = data.total || 0;
-    const isAlert  = sent / SMS_MONTHLY_CAP >= SMS_ALERT_PCT;
+    while (hasMore) {
+      const data = await ghl(`/contacts/search`, {
+        method: 'POST',
+        body: JSON.stringify({
+          locationId: LOCATION_ID,
+          filters: [{ field: 'tags', operator: 'contains', value: TAG_REVIEW }],
+          pageLimit: 100,
+          page,
+        }),
+      });
+
+      const contacts = data.contacts || [];
+      for (const c of contacts) {
+        const updated = new Date(c.dateUpdated).getTime();
+        if (updated >= monthStart && updated <= monthEnd) sent++;
+      }
+
+      // Stop if we've seen all contacts or they're older than this month
+      // (contacts are returned newest-first, so once all on page are before
+      // monthStart we can stop early)
+      const allOlder = contacts.every(c => new Date(c.dateUpdated).getTime() < monthStart);
+      hasMore = contacts.length === 100 && !allOlder;
+      page++;
+    }
+
+    const isAlert = sent / SMS_MONTHLY_CAP >= SMS_ALERT_PCT;
 
     res.json({
       sent,
