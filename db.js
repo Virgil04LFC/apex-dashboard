@@ -7,7 +7,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'crypto';
 import { mkdirSync } from 'fs';
 
 const DB_DIR  = process.env.DB_DIR  || '/data';
@@ -45,6 +45,18 @@ db.exec(`
     created_at         TEXT    DEFAULT (datetime('now'))
   );
 `);
+
+// ── Migrations (idempotent) ───────────────────────────────────────────────────
+// SQLite doesn't support IF NOT EXISTS on ALTER TABLE — check column list first.
+{
+  const cols = db.prepare('PRAGMA table_info(tenants)').all().map(c => c.name);
+  if (!cols.includes('portal_pin_hash'))
+    db.exec("ALTER TABLE tenants ADD COLUMN portal_pin_hash TEXT DEFAULT ''");
+  if (!cols.includes('form_id'))
+    db.exec("ALTER TABLE tenants ADD COLUMN form_id TEXT DEFAULT ''");
+  if (!cols.includes('reputation_url'))
+    db.exec("ALTER TABLE tenants ADD COLUMN reputation_url TEXT DEFAULT ''");
+}
 
 // ── Encryption (AES-256-GCM) ──────────────────────────────────────────────────
 function encrypt(plaintext) {
@@ -97,14 +109,19 @@ export function upsertTenant({
   field_key_rating, field_key_feedback,
   gbp_link = '', alert_email = '', ai_tone = '',
   sms_monthly_cap = 50, ghl_token, active = 1,
+  form_id = '', reputation_url = '',
+  portal_pin,          // plaintext PIN — hashed here before storage
+  portal_pin_hash,     // pre-hashed PIN (takes precedence if supplied)
 }) {
-  const ghl_token_enc = encrypt(ghl_token);
+  const ghl_token_enc   = encrypt(ghl_token);
+  const pin_hash        = portal_pin_hash || (portal_pin ? hashPin(portal_pin) : '');
   db.prepare(`
     INSERT INTO tenants
       (location_id, subdomain, business_name, survey_id,
        field_key_rating, field_key_feedback, gbp_link, alert_email,
-       ai_tone, sms_monthly_cap, ghl_token_enc, active)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ai_tone, sms_monthly_cap, ghl_token_enc, active,
+       form_id, reputation_url, portal_pin_hash)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(location_id) DO UPDATE SET
       subdomain          = excluded.subdomain,
       business_name      = excluded.business_name,
@@ -116,13 +133,30 @@ export function upsertTenant({
       ai_tone            = excluded.ai_tone,
       sms_monthly_cap    = excluded.sms_monthly_cap,
       ghl_token_enc      = excluded.ghl_token_enc,
-      active             = excluded.active
+      active             = excluded.active,
+      form_id            = excluded.form_id,
+      reputation_url     = excluded.reputation_url,
+      portal_pin_hash    = CASE
+        WHEN excluded.portal_pin_hash != '' THEN excluded.portal_pin_hash
+        ELSE portal_pin_hash
+      END
   `).run(
     location_id, subdomain.toLowerCase(), business_name, survey_id,
     field_key_rating, field_key_feedback, gbp_link, alert_email,
     ai_tone, sms_monthly_cap, ghl_token_enc, active ? 1 : 0,
+    form_id, reputation_url, pin_hash,
   );
   return getTenantByLocationId(location_id);
+}
+
+// ── PIN helpers ────────────────────────────────────────────────────────────────────
+export function hashPin(pin) {
+  return createHash('sha256').update(String(pin).trim()).digest('hex');
+}
+
+export function verifyPin(pin, storedHash) {
+  if (!storedHash) return false;
+  return hashPin(pin) === storedHash;
 }
 
 /** List all tenants (safe — no tokens). */

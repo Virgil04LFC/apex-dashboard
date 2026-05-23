@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ClientFlow" />
+  <meta name="theme-color" content="#4f46e5" />
+  <title>ClientFlow Portal</title>
+  <link rel="manifest" href="/portal/manifest.json" />
+  <!-- iOS home screen icons -->
+  <link rel="apple-touch-icon" href="/portal/icon-192.svg" />
+  <link rel="stylesheet" href="/portal/portal.css" />
+</head>
+<body>
+
+  <!-- ── PIN screen ─────────────────────────────────────────────────── -->
+  <div id="screen-pin" class="screen active">
+    <div class="pin-card">
+      <div class="logo-mark">CF</div>
+      <h1 id="pin-business-name">Loading…</h1>
+      <p class="pin-subtitle">Enter your PIN to continue</p>
+
+      <div class="pin-dots" id="pin-dots">
+        <span></span><span></span><span></span><span></span>
+      </div>
+
+      <div class="pin-keypad">
+        <button class="key" data-digit="1">1</button>
+        <button class="key" data-digit="2">2</button>
+        <button class="key" data-digit="3">3</button>
+        <button class="key" data-digit="4">4</button>
+        <button class="key" data-digit="5">5</button>
+        <button class="key" data-digit="6">6</button>
+        <button class="key" data-digit="7">7</button>
+        <button class="key" data-digit="8">8</button>
+        <button class="key" data-digit="9">9</button>
+        <button class="key key-empty"></button>
+        <button class="key" data-digit="0">0</button>
+        <button class="key key-back" id="key-back">⌫</button>
+      </div>
+
+      <p class="pin-error" id="pin-error" hidden>Incorrect PIN. Try again.</p>
+    </div>
+  </div>
+
+  <!-- ── Main portal screen ─────────────────────────────────────────── -->
+  <div id="screen-portal" class="screen">
+    <header class="portal-header">
+      <div class="logo-mark small">CF</div>
+      <span id="portal-business-name">Loading…</span>
+    </header>
+
+    <main class="portal-main">
+      <a id="btn-form" class="portal-btn btn-primary" href="#" target="_blank" rel="noopener">
+        <span class="btn-icon">📋</span>
+        <span class="btn-label">Send Review Request</span>
+        <span class="btn-arrow">›</span>
+      </a>
+
+      <a id="btn-dashboard" class="portal-btn btn-secondary" href="#" target="_blank" rel="noopener">
+        <span class="btn-icon">📊</span>
+        <span class="btn-label">View Dashboard</span>
+        <span class="btn-arrow">›</span>
+      </a>
+
+      <div id="btn-reviews-connected" class="portal-btn btn-secondary" style="display:none">
+        <a id="btn-reviews-link" href="#" target="_blank" rel="noopener" style="display:contents">
+          <span class="btn-icon">⭐</span>
+          <span class="btn-label">Manage Reviews</span>
+          <span class="btn-arrow">›</span>
+        </a>
+      </div>
+
+      <div id="btn-reviews-pending" class="portal-btn btn-disabled" style="display:none">
+        <span class="btn-icon">⭐</span>
+        <div class="btn-label-stack">
+          <span class="btn-label">Manage Reviews</span>
+          <span class="btn-sublabel">Connect Google Business Profile first — your ClientFlow contact will help.</span>
+        </div>
+      </div>
+    </main>
+
+    <footer class="portal-footer">
+      <span>Powered by <strong>ClientFlow</strong></span>
+    </footer>
+  </div>
+
+  <!-- ── Install banner (iOS) ───────────────────────────────────────── -->
+  <div id="install-banner" class="install-banner" hidden>
+    <div class="install-content">
+      <div class="install-icon">CF</div>
+      <div class="install-text">
+        <strong>Add to Home Screen</strong>
+        <span id="install-instructions">Tap <strong>Share</strong> then <strong>Add to Home Screen</strong></span>
+      </div>
+      <button id="install-dismiss" class="install-dismiss">✕</button>
+    </div>
+    <!-- iOS arrow pointing to share button -->
+    <div class="install-arrow-ios" id="install-arrow-ios" hidden>▼</div>
+  </div>
+
+  <script src="/portal/portal.js"></script>
+</body>
+</html>

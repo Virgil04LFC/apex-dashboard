@@ -34,7 +34,7 @@ git pull
 flyctl deploy --remote-only
 ```
 
-### 4. Seed Apex as tenant #1
+### 4. Seed Apex as tenant #1 (dashboard + portal)
 After deploy, run this curl from your Mac:
 ```bash
 curl -s -X POST https://apex-reviews-dash.fly.dev/admin/tenants \
@@ -51,10 +51,16 @@ curl -s -X POST https://apex-reviews-dash.fly.dev/admin/tenants \
     "alert_email":        "liamoflanagan@gmail.com",
     "ai_tone":            "",
     "sms_monthly_cap":    50,
-    "ghl_token":          "PASTE_APEX_TOKEN_HERE"
+    "ghl_token":          "PASTE_APEX_TOKEN_HERE",
+    "form_id":            "NYPZtAhKVQwX8FIqXaAP",
+    "reputation_url":     "https://app.gohighlevel.com/v2/location/WqqCMnmsoIF1BZY8iWt5/reputation",
+    "portal_pin":         "0000"
   }'
 ```
 Replace `PASTE_APEX_TOKEN_HERE` with: pit-bd707132-1838-41e3-bda3-ffe50a3a06b5
+
+The `portal_pin` field is the dealer's 4-digit PIN (plaintext — hashed before storage).
+For testing use `"0000"` now; swap to Terry's real PIN before handover.
 
 Expected response:
 ```json
