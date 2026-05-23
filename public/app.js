@@ -1,10 +1,10 @@
-// ── Apex Motors Review Dashboard ────────────────────────────────────────────
-// Fetches from /api/feedback and /api/sms-count (Express proxy to GHL).
+// ── ClientFlow Review Dashboard ───────────────────────────────────────────────
+// Fetches from /api/config, /api/feedback, /api/sms-count (Express proxy to GHL).
 // Auto-refreshes every 5 minutes.
 
 const REFRESH_MS = 5 * 60 * 1000;
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function stars(rating, max = 5) {
   if (rating === null || rating === undefined) return '—';
   const n = Math.max(0, Math.min(max, Math.round(rating)));
@@ -30,7 +30,39 @@ function setLastUpdated() {
   }
 }
 
-// ── Widget 3: SMS counter ────────────────────────────────────────────────────
+// Safe HTML escape
+function esc(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Config (business name, cap) ───────────────────────────────────────────────
+async function loadConfig() {
+  try {
+    const r    = await fetch('/api/config');
+    const data = await r.json();
+    if (!r.ok) return;
+
+    if (data.business_name) {
+      const titleEl = document.getElementById('page-title');
+      if (titleEl) titleEl.textContent = `${data.business_name} — Review Dashboard`;
+      document.title = `${data.business_name} — Review Dashboard`;
+    }
+
+    if (data.sms_monthly_cap) {
+      const capEl = document.getElementById('sms-cap');
+      if (capEl) capEl.textContent = data.sms_monthly_cap;
+    }
+  } catch (err) {
+    console.warn('config load failed (non-fatal):', err.message);
+  }
+}
+
+// ── Widget 3: SMS counter ─────────────────────────────────────────────────────
 async function loadSmsCount() {
   try {
     const r    = await fetch('/api/sms-count');
@@ -44,8 +76,8 @@ async function loadSmsCount() {
     const bar = document.getElementById('sms-bar');
     bar.style.width = Math.min(data.pct, 100) + '%';
     bar.classList.remove('warn', 'alert');
-    if (data.pct >= 100)      bar.classList.add('alert');
-    else if (data.isAlert)    bar.classList.add('warn');
+    if (data.pct >= 100)   bar.classList.add('alert');
+    else if (data.isAlert) bar.classList.add('warn');
 
     const alertEl = document.getElementById('sms-alert');
     alertEl.hidden = !data.isAlert;
@@ -56,7 +88,7 @@ async function loadSmsCount() {
   }
 }
 
-// ── Widget 1: Private Feedback ───────────────────────────────────────────────
+// ── Widget 1: Private Feedback ────────────────────────────────────────────────
 async function loadFeedback() {
   const stateEl = document.getElementById('feedback-state');
   const tableEl = document.getElementById('feedback-table');
@@ -79,13 +111,10 @@ async function loadFeedback() {
       return;
     }
 
-    // Populate table
     bodyEl.innerHTML = data.rows.map(row => `
       <tr>
         <td class="td-name">${esc(row.name)}</td>
-        <td class="td-rating">
-          <span class="stars">${stars(row.rating)}</span>
-        </td>
+        <td class="td-rating"><span class="stars">${stars(row.rating)}</span></td>
         <td class="td-feedback">${esc(row.feedback || '—')}</td>
         <td class="td-date">${formatDate(row.date)}</td>
       </tr>
@@ -99,21 +128,12 @@ async function loadFeedback() {
   }
 }
 
-// Safe HTML escape
-function esc(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-// ── Init & auto-refresh ──────────────────────────────────────────────────────
+// ── Init & auto-refresh ───────────────────────────────────────────────────────
 async function refresh() {
   await Promise.all([loadSmsCount(), loadFeedback()]);
   setLastUpdated();
 }
 
+loadConfig();   // one-time, not part of refresh loop
 refresh();
 setInterval(refresh, REFRESH_MS);

@@ -2,43 +2,79 @@ import express from 'express';
 import fetch from 'node-fetch';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { getTenantBySubdomain, upsertTenant, listTenants } from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const app = express();
+const app  = express();
 const PORT = process.env.PORT || 3000;
 
-// ── Config ─────────────────────────────────────────────────────────────────
-const GHL_TOKEN   = process.env.GHL_TOKEN;
-const LOCATION_ID = process.env.LOCATION_ID;
+// Admin secret for protected endpoints (set as Fly secret: ADMIN_SECRET)
+const ADMIN_SECRET   = process.env.ADMIN_SECRET;
+// Fallback subdomain when no custom domain match (e.g. apex-reviews-dash.fly.dev → 'apex')
+const DEFAULT_TENANT = process.env.DEFAULT_TENANT || '';
+
 const GHL_BASE    = 'https://services.leadconnectorhq.com';
 const GHL_VERSION = '2021-07-28';
+const TAG_REVIEW  = 'review-request-sent';
+const SMS_ALERT_PCT = 0.8;
 
-// Survey IDs (set once per sub-account — update via env if it ever changes)
-const SURVEY_ID = process.env.SURVEY_ID || 'JfibjKzc2dKhEmvfwDG5';
+app.use(express.json());
 
-// Survey field keys (GHL uses contact.xxx keys; strip prefix for others lookup)
-const FIELD_RATING   = 'rating_rat584_how_would_you_rate_your_experience';
-const FIELD_FEEDBACK = 'or_if_youd_prefer_to_tell_us_privately_leave_a_message_here';
+// ── Tenant middleware ─────────────────────────────────────────────────────────
+/**
+ * Resolves the requesting subdomain to a tenant row from the DB.
+ * Resolution order:
+ *   1. Subdomain from Host if it matches *.clientflowapp.uk
+ *   2. DEFAULT_TENANT env var (covers legacy fly.dev URL and local dev)
+ *
+ * Attaches req.tenant on success; next(err) on failure.
+ */
+function resolveTenant(req, res, next) {
+  const host = (req.headers.host || '').toLowerCase();
 
-// Widget 3 config
-const SMS_MONTHLY_CAP  = parseInt(process.env.SMS_CAP || '50', 10);
-const SMS_ALERT_PCT    = 0.8;
-const TAG_REVIEW       = 'review-request-sent';
+  // Match: {sub}.clientflowapp.uk
+  let subdomain = '';
+  const customMatch = host.match(/^([a-z0-9-]+)\.clientflowapp\.uk$/);
+  if (customMatch) {
+    subdomain = customMatch[1];
+  } else if (DEFAULT_TENANT) {
+    subdomain = DEFAULT_TENANT;
+  }
 
-if (!GHL_TOKEN || !LOCATION_ID) {
-  console.error('Missing required env vars: GHL_TOKEN, LOCATION_ID');
-  process.exit(1);
+  if (!subdomain) {
+    return res.status(404).json({ error: 'Unknown tenant. No subdomain matched.' });
+  }
+
+  const tenant = getTenantBySubdomain(subdomain);
+  if (!tenant) {
+    return res.status(404).json({ error: `No active tenant found for subdomain: ${subdomain}` });
+  }
+
+  req.tenant = tenant;
+  next();
+}
+
+// ── Admin auth middleware ─────────────────────────────────────────────────────
+function requireAdmin(req, res, next) {
+  if (!ADMIN_SECRET) {
+    return res.status(503).json({ error: 'Admin endpoint not configured (ADMIN_SECRET not set).' });
+  }
+  const auth = req.headers.authorization || '';
+  if (auth !== `Bearer ${ADMIN_SECRET}`) {
+    return res.status(401).json({ error: 'Unauthorised.' });
+  }
+  next();
 }
 
 // ── GHL helper ─────────────────────────────────────────────────────────────
-async function ghl(path, opts = {}) {
+async function ghl(path, tenant, opts = {}) {
   const url = `${GHL_BASE}${path}`;
   const res = await fetch(url, {
     ...opts,
     headers: {
-      Authorization: `Bearer ${GHL_TOKEN}`,
-      Version:       GHL_VERSION,
+      Authorization:  `Bearer ${tenant.ghl_token}`,
+      Version:        GHL_VERSION,
       'Content-Type': 'application/json',
       ...(opts.headers || {}),
     },
@@ -50,27 +86,29 @@ async function ghl(path, opts = {}) {
   return res.json();
 }
 
-// ── API routes ──────────────────────────────────────────────────────────────
+// ── API: tenant config (safe — no token) ─────────────────────────────────────
+app.get('/api/config', resolveTenant, (req, res) => {
+  const { ghl_token, ghl_token_enc, ...safe } = req.tenant;
+  res.json(safe);
+});
 
-/**
- * GET /api/feedback
- * Returns the 20 most recent private feedback submissions.
- * Each row: { name, rating, feedback, date, contactId }
- */
-app.get('/api/feedback', async (req, res) => {
+// ── API: private feedback ─────────────────────────────────────────────────────
+app.get('/api/feedback', resolveTenant, async (req, res) => {
+  const tenant = req.tenant;
   try {
     const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
     const data  = await ghl(
-      `/surveys/submissions?locationId=${LOCATION_ID}&surveyId=${SURVEY_ID}&limit=${limit}`
+      `/surveys/submissions?locationId=${tenant.location_id}&surveyId=${tenant.survey_id}&limit=${limit}`,
+      tenant,
     );
 
     const rows = (data.submissions || []).map(sub => {
-      const others   = sub.others || {};
-      const rawRating = others[FIELD_RATING] ?? others[`contact.${FIELD_RATING}`];
-      const rating    = rawRating !== undefined && rawRating !== null
-        ? parseInt(rawRating, 10)
-        : null;
-      const feedback  = others[FIELD_FEEDBACK] ?? others[`contact.${FIELD_FEEDBACK}`] ?? '';
+      const others     = sub.others || {};
+      const rawRating  = others[tenant.field_key_rating] ?? others[`contact.${tenant.field_key_rating}`];
+      const rating     = rawRating !== undefined && rawRating !== null
+        ? parseInt(rawRating, 10) : null;
+      const feedback   = others[tenant.field_key_feedback]
+        ?? others[`contact.${tenant.field_key_feedback}`] ?? '';
 
       return {
         contactId: sub.contactId || null,
@@ -82,44 +120,32 @@ app.get('/api/feedback', async (req, res) => {
       };
     });
 
-    // Only return rows that have a rating (i.e., the customer completed the survey)
     const filtered = rows.filter(r => r.rating !== null);
     res.json({ rows: filtered, total: filtered.length });
   } catch (err) {
-    console.error('feedback error:', err.message);
+    console.error(`[${tenant.subdomain}] feedback error:`, err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-/**
- * GET /api/sms-count
- * Counts contacts tagged review-request-sent with dateUpdated in the current
- * calendar month. Returns { sent, cap, alertPct, isAlert, monthLabel }.
- *
- * Note (v1): This counts unique contacts tagged this month. If a contact is
- * re-tagged (re-request) in the same month, dateUpdated updates and they
- * still count once. Good enough for v1 with a clean per-customer send model.
- * Phase 2: use monthly rotating tags (review-sent-YYYY-MM) for exact counts.
- */
-app.get('/api/sms-count', async (req, res) => {
+// ── API: SMS count ────────────────────────────────────────────────────────────
+app.get('/api/sms-count', resolveTenant, async (req, res) => {
+  const tenant = req.tenant;
   try {
     const now        = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
     const monthLabel = now.toLocaleString('en-IE', { month: 'long', year: 'numeric' });
 
-    // Pull all contacts tagged review-request-sent, then filter by dateUpdated
-    // server-side (GHL contacts/search doesn't support date range operators on
-    // dateUpdated). Cap is 50/month so total tagged set stays small.
     let page = 1;
     let sent = 0;
     let hasMore = true;
 
     while (hasMore) {
-      const data = await ghl(`/contacts/search`, {
+      const data = await ghl('/contacts/search', tenant, {
         method: 'POST',
         body: JSON.stringify({
-          locationId: LOCATION_ID,
+          locationId: tenant.location_id,
           filters: [{ field: 'tags', operator: 'contains', value: TAG_REVIEW }],
           pageLimit: 100,
           page,
@@ -132,31 +158,61 @@ app.get('/api/sms-count', async (req, res) => {
         if (updated >= monthStart && updated <= monthEnd) sent++;
       }
 
-      // Stop if we've seen all contacts or they're older than this month
-      // (contacts are returned newest-first, so once all on page are before
-      // monthStart we can stop early)
       const allOlder = contacts.every(c => new Date(c.dateUpdated).getTime() < monthStart);
       hasMore = contacts.length === 100 && !allOlder;
       page++;
     }
 
-    const isAlert = sent / SMS_MONTHLY_CAP >= SMS_ALERT_PCT;
+    const cap     = tenant.sms_monthly_cap;
+    const isAlert = sent / cap >= SMS_ALERT_PCT;
 
     res.json({
       sent,
-      cap:        SMS_MONTHLY_CAP,
+      cap,
       alertPct:   SMS_ALERT_PCT * 100,
       isAlert,
-      pct:        Math.round((sent / SMS_MONTHLY_CAP) * 100),
+      pct:        Math.round((sent / cap) * 100),
       monthLabel,
     });
   } catch (err) {
-    console.error('sms-count error:', err.message);
+    console.error(`[${tenant.subdomain}] sms-count error:`, err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ── Static frontend ─────────────────────────────────────────────────────────
+// ── Admin: list tenants ───────────────────────────────────────────────────────
+app.get('/admin/tenants', requireAdmin, (req, res) => {
+  res.json({ tenants: listTenants() });
+});
+
+// ── Admin: upsert tenant ──────────────────────────────────────────────────────
+/**
+ * POST /admin/tenants
+ * Body (JSON): all tenant fields including ghl_token (plaintext — encrypted by db.js).
+ * Required: location_id, subdomain, business_name, survey_id,
+ *           field_key_rating, field_key_feedback, ghl_token
+ * Optional: gbp_link, alert_email, ai_tone, sms_monthly_cap, active
+ */
+app.post('/admin/tenants', requireAdmin, (req, res) => {
+  const required = ['location_id', 'subdomain', 'business_name', 'survey_id',
+                    'field_key_rating', 'field_key_feedback', 'ghl_token'];
+  const missing  = required.filter(f => !req.body[f]);
+  if (missing.length) {
+    return res.status(422).json({ error: `Missing required fields: ${missing.join(', ')}` });
+  }
+
+  try {
+    const created = upsertTenant(req.body);
+    // Return safe view (no token)
+    const { ghl_token, ghl_token_enc, ...safe } = created;
+    res.status(201).json({ tenant: safe });
+  } catch (err) {
+    console.error('upsertTenant error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Static frontend ───────────────────────────────────────────────────────────
 app.use(express.static(join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
@@ -164,6 +220,6 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Apex Dashboard running on port ${PORT}`);
-  console.log(`Location: ${LOCATION_ID}`);
+  console.log(`ClientFlow Dashboard running on port ${PORT}`);
+  console.log(`Default tenant: ${DEFAULT_TENANT || '(none — subdomain required)'}`);
 });

@@ -1,7 +1,7 @@
 {
-  "name": "apex-dashboard",
-  "version": "1.0.0",
-  "description": "Apex Motors review dashboard — GHL custom embed",
+  "name": "clientflow-dashboard",
+  "version": "2.0.0",
+  "description": "ClientFlow multi-tenant review dashboard",
   "main": "server.js",
   "type": "module",
   "scripts": {
@@ -9,10 +9,11 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
+    "better-sqlite3": "^9.4.3",
     "express": "^4.18.2",
     "node-fetch": "^3.3.2"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   }
 }

@@ -1,12 +1,20 @@
-# fly.toml — Apex Motors Review Dashboard
-# Region: Frankfurt (fra) — EU, close to GHL EU infrastructure
-# Deploy: flyctl deploy (from this directory)
-# Secrets: flyctl secrets set GHL_TOKEN=pit-xxx LOCATION_ID=WqqCMnmsoIF1BZY8iWt5
+# fly.toml — ClientFlow Multi-Tenant Review Dashboard
+# Region: Frankfurt (fra)
+# Deploy: flyctl deploy --remote-only (from Mac, repo cloned locally)
 
-app            = "apex-dashboard"
+app            = "apex-reviews-dash"
 primary_region = "fra"
 
 [build]
+
+[env]
+  # DEFAULT_TENANT covers the legacy apex-reviews-dash.fly.dev URL.
+  # New dealers resolve via subdomain (e.g. apex.clientflowapp.uk → 'apex').
+  DEFAULT_TENANT = "apex"
+
+[mounts]
+  source      = "dashboard_data"
+  destination = "/data"
 
 [http_service]
   internal_port        = 3000
