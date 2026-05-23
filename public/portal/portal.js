@@ -57,9 +57,11 @@ function hidePinError() {
 
 // ── Screens ──────────────────────────────────────────────────────────────────
 function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  document.getElementById(id).style.display = 'flex';
+  document.querySelectorAll('.screen').forEach(s => {
+    s.classList.remove('active');
+    s.style.removeProperty('display'); // clear inline style so CSS display:none takes over
+  });
+  document.getElementById(id).classList.add('active'); // CSS .screen.active { display: flex }
 }
 
 // ── API helpers ──────────────────────────────────────────────────────────────

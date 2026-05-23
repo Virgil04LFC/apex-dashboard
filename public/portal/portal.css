@@ -32,6 +32,7 @@ html, body {
   align-items: center;
   justify-content: center;
   padding: 24px 16px calc(24px + var(--safe-bottom));
+  background: var(--bg); /* opaque — screens must never bleed through each other */
 }
 .screen.active { display: flex; }
 
