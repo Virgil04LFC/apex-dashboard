@@ -14,7 +14,7 @@ Run this once (substituting the real values):
 ```bash
 flyctl secrets set \
   DB_ENCRYPTION_KEY="f9616fd1c0892bc1ea5eede174604bcd5f3ff55659cd01a3d4b07e220c3eb2d6" \
-  ADMIN_SECRET="rYKac7rurLe7qmlv9tuev_QJbrmIqFSg" \
+  ADMIN_SECRET="k4Vgl9XIBybRY9BsOGDQAIYqpcu1jNwT" \
   GHL_TOKEN="" \
   LOCATION_ID="" \
   SURVEY_ID=""
@@ -38,7 +38,7 @@ flyctl deploy --remote-only
 After deploy, run this curl from your Mac:
 ```bash
 curl -s -X POST https://apex-reviews-dash.fly.dev/admin/tenants \
-  -H "Authorization: Bearer rYKac7rurLe7qmlv9tuev_QJbrmIqFSg" \
+  -H "Authorization: Bearer k4Vgl9XIBybRY9BsOGDQAIYqpcu1jNwT" \
   -H "Content-Type: application/json" \
   -d '{
     "location_id":        "WqqCMnmsoIF1BZY8iWt5",
@@ -87,7 +87,7 @@ Secrets and volume persist across deploys — no re-seeding needed.
 Manual method until the onboarding script is built:
 ```bash
 curl -s -X POST https://apex-reviews-dash.fly.dev/admin/tenants \
-  -H "Authorization: Bearer rYKac7rurLe7qmlv9tuev_QJbrmIqFSg" \
+  -H "Authorization: Bearer k4Vgl9XIBybRY9BsOGDQAIYqpcu1jNwT" \
   -H "Content-Type: application/json" \
   -d '{
     "location_id":        "GHL_LOCATION_ID",
@@ -112,7 +112,7 @@ and the custom domain added in Fly: `flyctl certs add dealername.clientflowapp.u
 ## List all tenants
 ```bash
 curl -s https://apex-reviews-dash.fly.dev/admin/tenants \
-  -H "Authorization: Bearer rYKac7rurLe7qmlv9tuev_QJbrmIqFSg"
+  -H "Authorization: Bearer k4Vgl9XIBybRY9BsOGDQAIYqpcu1jNwT"
 ```
 
 ---
